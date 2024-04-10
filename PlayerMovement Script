@@ -1,0 +1,106 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class PlayerMovement : MonoBehaviour
+{
+    public float speed;
+    public float rotationSpeed;
+    public float jumpHeight;
+    public float gravity = -9.81f;
+    public float animationSpeedMultiplier = 1.0f; // Serialized field for animation speed multiplier
+    public float turboMultiplier = 2f; // Serialized field for turbo walk speed multiplier
+
+    private CharacterController characterController;
+    private Animator animator;
+    private Vector3 velocity;
+    private bool isJumping = false;
+
+    void Start()
+    {
+        characterController = GetComponent<CharacterController>();
+        animator = GetComponent<Animator>();
+    }
+
+    void Update()
+    {
+        float horizontalInput = Input.GetAxis("Horizontal");
+        float verticalInput = Input.GetAxis("Vertical");
+
+        // Check if shift is pressed for turbo walk
+        bool isTurbo = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        float currentSpeed = isTurbo ? speed * turboMultiplier : speed; // Apply turbo multiplier if shift is pressed
+
+        Vector3 movementDirection = new Vector3(horizontalInput, 0, verticalInput).normalized;
+        float magnitude = Mathf.Clamp01(movementDirection.magnitude);
+
+        // Rotate the character
+        if (movementDirection != Vector3.zero)
+        {
+            Quaternion toRotation = Quaternion.LookRotation(movementDirection, Vector3.up);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, toRotation, rotationSpeed * Time.deltaTime);
+        }
+
+        // Move the character
+        characterController.SimpleMove(movementDirection * magnitude * currentSpeed);
+
+        // Update animations based on movement speed
+        float animationSpeed = isTurbo ? turboMultiplier : 1f;
+        animator.speed = animationSpeed * animationSpeedMultiplier; // Adjust animation speed
+
+        // Check for jump input
+        if (Input.GetKeyDown(KeyCode.Space) && IsGrounded())
+        {
+            // Trigger jump animation
+            PlayJumpAnimation();
+
+            // Calculate the required upwards velocity for the jump
+            velocity.y = Mathf.Sqrt(2 * Mathf.Abs(gravity) * jumpHeight);
+
+            // Set jumping flag
+            isJumping = true;
+        }
+
+        // Check for jump release
+        if (Input.GetKeyUp(KeyCode.Space))
+        {
+            // Reset jumping flag
+            isJumping = false;
+        }
+
+        // Apply gravity
+        velocity.y += gravity * Time.deltaTime;
+        characterController.Move(velocity * Time.deltaTime);
+
+        // Update animations based on movement
+        UpdateAnimations(horizontalInput, verticalInput);
+    }
+
+    bool IsGrounded()
+    {
+        // Cast a ray downward to check for ground contact
+        RaycastHit hit;
+        if (Physics.Raycast(transform.position, Vector3.down, out hit, characterController.height / 2 + 0.1f))
+        {
+            // Check if the collider hit is not the player's collider
+            if (!hit.collider.CompareTag("Player"))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void UpdateAnimations(float horizontalInput, float verticalInput)
+    {
+        bool isMoving = (Mathf.Abs(horizontalInput) > 0.01f) || (Mathf.Abs(verticalInput) > 0.01f);
+        animator.SetBool("IsRunning", isMoving);
+        animator.SetBool("IsIdle", !isMoving);
+        animator.SetBool("IsJumping", isJumping);
+    }
+
+    void PlayJumpAnimation()
+    {
+        animator.SetTrigger("Jump");
+    }
+}
